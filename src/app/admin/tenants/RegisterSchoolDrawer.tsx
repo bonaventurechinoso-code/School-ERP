@@ -7,9 +7,10 @@ import RegisterSchoolForm from "./RegisterSchoolForm";
 interface RegisterSchoolDrawerProps {
   isOpen: boolean;
   onClose: () => void;
+  onSuccess?: (createdTenant?: any) => void;
 }
 
-export default function RegisterSchoolDrawer({ isOpen, onClose }: RegisterSchoolDrawerProps) {
+export default function RegisterSchoolDrawer({ isOpen, onClose, onSuccess }: RegisterSchoolDrawerProps) {
   // Listen for Escape key
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -77,7 +78,12 @@ export default function RegisterSchoolDrawer({ isOpen, onClose }: RegisterSchool
 
         {/* Drawer Scrollable Body */}
         <div className="flex-1 overflow-y-auto p-5 sm:p-6">
-          <RegisterSchoolForm onSuccess={onClose} />
+          <RegisterSchoolForm
+            onSuccess={(newTenant) => {
+              if (onSuccess) onSuccess(newTenant);
+              onClose();
+            }}
+          />
         </div>
       </div>
     </div>

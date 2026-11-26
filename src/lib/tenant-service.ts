@@ -26,6 +26,7 @@ export interface TenantWithAdminResult {
   school: any;
   user: any;
   staff: any;
+  emailResult?: any;
 }
 
 /**
@@ -436,8 +437,9 @@ export async function createTenantWithAdmin(
   }
 
   // Welcome email to newly provisioned tenant administrator
+  let emailResult: any = null;
   try {
-    await sendSchoolRegistrationSuccessEmail({
+    emailResult = await sendSchoolRegistrationSuccessEmail({
       schoolName: trimmedName,
       subdomain: canonicalSlug,
       adminEmail: normalizedEmail,
@@ -446,8 +448,9 @@ export async function createTenantWithAdmin(
       tiers: effectiveTiers,
       schoolId: school.id,
     });
-  } catch (emailErr) {
+  } catch (emailErr: any) {
     console.error("[TENANT_WELCOME_EMAIL_ERROR]:", emailErr);
+    emailResult = { success: false, error: emailErr?.message || String(emailErr) };
   }
 
   // Super-admin notification and alert email
@@ -516,7 +519,7 @@ export async function createTenantWithAdmin(
     }
   }
 
-  return { school, user, staff };
+  return { school, user, staff, emailResult };
 }
 
 export interface HardDeleteResult {

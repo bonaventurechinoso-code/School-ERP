@@ -24,7 +24,7 @@ export const ACADEMIC_TIERS_OPTIONS = [
 ];
 
 export interface RegisterSchoolFormProps {
-  onSuccess?: () => void;
+  onSuccess?: (createdTenant?: any) => void;
 }
 
 export default function RegisterSchoolForm({ onSuccess }: RegisterSchoolFormProps = {}) {
@@ -74,7 +74,12 @@ export default function RegisterSchoolForm({ onSuccess }: RegisterSchoolFormProp
 
     // Validation checks
     const trimmedName = formData.name.trim();
-    const cleanSubdomain = formData.subdomain.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+    const cleanSubdomain = formData.subdomain
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9-]/g, "")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "");
     const trimmedEmail = formData.adminEmail.trim();
 
     if (!trimmedName || !cleanSubdomain || !trimmedEmail) {
@@ -130,6 +135,19 @@ export default function RegisterSchoolForm({ onSuccess }: RegisterSchoolFormProp
       }
 
       setSuccessMsg(`Tenant "${trimmedName}" (${cleanSubdomain}) successfully created!`);
+      const createdTenantData = data.tenant ? {
+        id: data.tenant.id,
+        name: data.tenant.name || trimmedName,
+        subdomain: data.tenant.subdomain || cleanSubdomain,
+        contactPhone: formData.contactPhone.trim() || null,
+        status: "ACTIVE" as const,
+        isActive: true,
+        students_count: 0,
+        staff_count: 1,
+        academic_tiers: selectedTiers.map((t, idx) => ({ id: `tier-${idx}`, name: t })),
+        createdAt: new Date().toISOString(),
+      } : null;
+
       setFormData({
         name: "",
         subdomain: "",
@@ -141,7 +159,7 @@ export default function RegisterSchoolForm({ onSuccess }: RegisterSchoolFormProp
       setSelectedTiers([]);
       router.refresh();
       if (onSuccess) {
-        setTimeout(() => onSuccess(), 1500);
+        setTimeout(() => onSuccess(createdTenantData), 1200);
       }
     } catch (err: any) {
       // Fallback: try server action createSchool if API endpoint had network issue
@@ -155,8 +173,21 @@ export default function RegisterSchoolForm({ onSuccess }: RegisterSchoolFormProp
         fallbackFormData.append("confirmPassword", formData.confirmPassword);
         selectedTiers.forEach((tier) => fallbackFormData.append("tiers", tier));
 
-        await createSchool(fallbackFormData);
+        const fallbackResult = await createSchool(fallbackFormData);
         setSuccessMsg(`Tenant "${trimmedName}" successfully provisioned!`);
+        const fallbackTenantData = fallbackResult?.school ? {
+          id: fallbackResult.school.id,
+          name: fallbackResult.school.name || trimmedName,
+          subdomain: fallbackResult.school.subdomain || cleanSubdomain,
+          contactPhone: formData.contactPhone.trim() || null,
+          status: "ACTIVE" as const,
+          isActive: true,
+          students_count: 0,
+          staff_count: 1,
+          academic_tiers: selectedTiers.map((t, idx) => ({ id: `tier-${idx}`, name: t })),
+          createdAt: new Date().toISOString(),
+        } : null;
+
         setFormData({
           name: "",
           subdomain: "",
@@ -167,6 +198,9 @@ export default function RegisterSchoolForm({ onSuccess }: RegisterSchoolFormProp
         });
         setSelectedTiers([]);
         router.refresh();
+        if (onSuccess) {
+          setTimeout(() => onSuccess(fallbackTenantData), 1200);
+        }
       } catch (fallbackErr: any) {
         setErrorMsg(err.message || fallbackErr.message || "An unexpected error occurred during tenant registration.");
       }

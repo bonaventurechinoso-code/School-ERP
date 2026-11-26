@@ -285,6 +285,19 @@ export default function TenantsConsoleView({
     fetchTenants();
   }, [fetchTenants]);
 
+  useEffect(() => {
+    if (initialSchools && initialSchools.length > 0) {
+      const deletedIds = new Set(getSoftDeletedIds());
+      const normalized: TenantSchoolItem[] = initialSchools
+        .filter((r) => !deletedIds.has(r.id) && !deletedIds.has(r.subdomain))
+        .map((s) => ({
+          ...s,
+          status: s.isActive ? "ACTIVE" : "SUSPENDED",
+        }));
+      setTenants(normalized);
+    }
+  }, [initialSchools]);
+
   const handleToggleStatus = async (tenant: TenantSchoolItem) => {
     const id = tenant.id;
     const currentStatus = tenant.status || (tenant.isActive ? "ACTIVE" : "SUSPENDED");
@@ -988,9 +1001,16 @@ export default function TenantsConsoleView({
       {/* 5. SLIDE-OVER REGISTER SCHOOL DRAWER */}
       <RegisterSchoolDrawer
         isOpen={isDrawerOpen}
-        onClose={() => {
-          setIsDrawerOpen(false);
+        onClose={() => setIsDrawerOpen(false)}
+        onSuccess={(createdTenant) => {
+          if (createdTenant) {
+            setTenants((prev) => [
+              createdTenant,
+              ...prev.filter((t) => t.id !== createdTenant.id && t.subdomain !== createdTenant.subdomain),
+            ]);
+          }
           fetchTenants();
+          setIsDrawerOpen(false);
         }}
       />
     </div>

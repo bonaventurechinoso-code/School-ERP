@@ -20,26 +20,36 @@ import { createTenantWithAdmin } from "@/lib/tenant-service";
 import { isReservedSubdomain, buildTenantUrl } from "@/lib/tenant-resolver";
 
 const VALID_TIERS = [
-  'Creche',
-  'Nursery / Kindergarten',
-  'Primary School',
-  'Junior Secondary School',
-  'Senior Secondary School',
-  'Technical / Vocational School',
-  'Islamiyya / Quranic School',
-  'University',
-  'Polytechnic',
-  'College of Education',
-  'Monotechnic',
-  'College of Nursing / Health Sciences',
-  'Professional / Postgraduate Institute',
-  'NURSERY',
-  'CRECHE',
-  'PRIMARY',
-  'SECONDARY',
+  'Creche', 'CRECHE',
+  'Nursery / Kindergarten', 'NURSERY', 'KINDERGARTEN',
+  'Primary School', 'PRIMARY',
+  'Junior Secondary School', 'Senior Secondary School', 'SECONDARY', 'JSS', 'SSS',
+  'Technical / Vocational School', 'TECHNICAL', 'VOCATIONAL',
+  'Islamiyya / Quranic School', 'ISLAMIYYA', 'QURANIC',
+  'University', 'UNIVERSITY',
+  'Polytechnic', 'POLYTECHNIC',
+  'College of Education', 'COLLEGE_OF_EDUCATION', 'COLLEGE_OF_ED',
+  'Monotechnic', 'MONOTECHNIC',
+  'College of Nursing / Health Sciences', 'COLLEGE_OF_NURSING',
+  'Professional / Postgraduate Institute', 'POSTGRADUATE', 'PROFESSIONAL',
   'PRIMARY_SECONDARY',
   'COMBINED_NURSERY_PRIMARY_SECONDARY'
 ];
+
+function normalizeTier(tier: string): string {
+  const upper = String(tier || "").trim().toUpperCase();
+  if (upper === "CRECHE") return "Creche";
+  if (upper === "NURSERY" || upper.includes("KINDERGARTEN")) return "Nursery / Kindergarten";
+  if (upper === "PRIMARY") return "Primary School";
+  if (upper === "SECONDARY" || upper === "JSS" || upper === "SSS") return "Senior Secondary School";
+  if (upper === "UNIVERSITY") return "University";
+  if (upper === "POLYTECHNIC") return "Polytechnic";
+  if (upper.includes("EDUCATION") || upper === "COLLEGE_OF_ED") return "College of Education";
+  if (upper === "MONOTECHNIC") return "Monotechnic";
+  if (upper.includes("NURSING")) return "College of Nursing / Health Sciences";
+  if (upper.includes("POSTGRADUATE") || upper.includes("PROFESSIONAL")) return "Professional / Postgraduate Institute";
+  return tier;
+}
 
 export async function POST(request: Request) {
   try {
@@ -79,14 +89,19 @@ export async function POST(request: Request) {
 
     const adminPasswordHash = await hashPassword(adminPasswordToSave);
 
-    // Validate standard backend enum metadata
-    const invalidTiers = tiers.filter((t: string) => !VALID_TIERS.includes(t));
+    // Normalize and validate standard backend enum metadata
+    const rawTiers = Array.isArray(tiers) ? tiers : [tiers];
+    const invalidTiers = rawTiers.filter((t: string) => {
+      const upper = String(t || "").trim().toUpperCase();
+      return !VALID_TIERS.some(v => v.toUpperCase() === upper);
+    });
     if (invalidTiers.length > 0) {
       return NextResponse.json(
         { error: `Invalid academic tier subtypes provided: ${invalidTiers.join(', ')}`, code: "INVALID_TIERS" },
         { status: 400 }
       );
     }
+    const effectiveTiers = rawTiers.map(normalizeTier);
 
     // Format subdomain (lowercase, allow hyphens, remove spaces/special chars)
     const formattedSubdomain = subdomain
@@ -405,7 +420,7 @@ export async function POST(request: Request) {
       adminEmail,
       adminPassword: adminPasswordToSave,
       contactPhone: contactPhone || null,
-      tiers,
+      tiers: effectiveTiers,
       tertiaryType: tertiaryType || null,
       isSelfRegistration: true,
       mustChangePassword: false,
@@ -426,16 +441,23 @@ export async function POST(request: Request) {
       tenantName: newSchool.school.name,
       role: "TENANT_ADMIN",
       staffRole: "Tenant Administrator",
-      activeTiers: tiers,
+      activeTiers: effectiveTiers,
       permissions: getDefaultPermissionsForRole("SCHOOL_ADMIN"),
       ipAddress: request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip"),
       userAgent: request.headers.get("user-agent"),
       sessionToken: distinctSessionToken,
     });
 
+    const portalUrl = buildTenantUrl(formattedSubdomain, hostHeader, "/", proto);
+    const loginUrl = buildTenantUrl(formattedSubdomain, hostHeader, "/login", proto);
+    const dashboardUrl = buildTenantUrl(formattedSubdomain, hostHeader, "/dashboard", proto);
+
+    const emailSent = Boolean(newSchool.emailResult?.success);
+    const emailStatus = newSchool.emailResult?.deliveryStatus || (emailSent ? "DELIVERED" : "PENDING_CONFIGURATION");
+
     const response = NextResponse.json({
       success: true,
-      message: "Tenant successfully provisioned.",
+      message: `Tenant "${schoolName}" successfully provisioned.`,
       tenant: {
         id: newSchool.school.id,
         name: newSchool.school.name,
@@ -448,16 +470,26 @@ export async function POST(request: Request) {
       subdomain: formattedSubdomain,
       schoolName,
       adminEmail,
+      emailSent,
+      emailStatus,
+      credentials: {
+        schoolName,
+        subdomain: formattedSubdomain,
+        adminEmail,
+        adminPassword: adminPasswordToSave,
+        portalUrl,
+        loginUrl,
+      },
       sslReady: sslSyncResult.sslReady,
       targetFqdn: sslSyncResult.targetFqdn,
-      portalUrl: buildTenantUrl(formattedSubdomain, hostHeader, "/", proto),
-      subdomainUrl: buildTenantUrl(formattedSubdomain, hostHeader, "/", proto),
-      fullDirectPortalUrl: buildTenantUrl(formattedSubdomain, hostHeader, "/", proto),
-      loginUrl: buildTenantUrl(formattedSubdomain, hostHeader, "/login", proto),
-      subdomainLoginUrl: buildTenantUrl(formattedSubdomain, hostHeader, "/login", proto),
-      dashboardUrl: buildTenantUrl(formattedSubdomain, hostHeader, "/dashboard", proto),
-      subdomainDashboardUrl: buildTenantUrl(formattedSubdomain, hostHeader, "/dashboard", proto),
-      redirectUrl: buildTenantUrl(formattedSubdomain, hostHeader, "/", proto),
+      portalUrl,
+      subdomainUrl: portalUrl,
+      fullDirectPortalUrl: portalUrl,
+      loginUrl,
+      subdomainLoginUrl: loginUrl,
+      dashboardUrl,
+      subdomainDashboardUrl: dashboardUrl,
+      redirectUrl: portalUrl,
       sessionToken: sessionResult.sessionToken,
       token: sessionResult.cookieToken,
       sessionPayload: {
@@ -468,7 +500,7 @@ export async function POST(request: Request) {
         tenantName: newSchool.school.name,
         role: "TENANT_ADMIN",
         staffRole: "Tenant Administrator",
-        activeTiers: tiers,
+        activeTiers: effectiveTiers,
         permissions: getDefaultPermissionsForRole("SCHOOL_ADMIN"),
         sessionToken: sessionResult.sessionToken,
         token: sessionResult.cookieToken,

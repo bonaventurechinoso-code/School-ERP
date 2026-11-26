@@ -15,26 +15,36 @@ import {
 import { sendSchoolRegistrationSuccessEmail } from "@/lib/mail";
 
 const VALID_TIERS = [
-  'Creche',
-  'Nursery / Kindergarten',
-  'Primary School',
-  'Junior Secondary School',
-  'Senior Secondary School',
-  'Technical / Vocational School',
-  'Islamiyya / Quranic School',
-  'University',
-  'Polytechnic',
-  'College of Education',
-  'Monotechnic',
-  'College of Nursing / Health Sciences',
-  'Professional / Postgraduate Institute',
-  'NURSERY',
-  'CRECHE',
-  'PRIMARY',
-  'SECONDARY',
+  'Creche', 'CRECHE',
+  'Nursery / Kindergarten', 'NURSERY', 'KINDERGARTEN',
+  'Primary School', 'PRIMARY',
+  'Junior Secondary School', 'Senior Secondary School', 'SECONDARY', 'JSS', 'SSS',
+  'Technical / Vocational School', 'TECHNICAL', 'VOCATIONAL',
+  'Islamiyya / Quranic School', 'ISLAMIYYA', 'QURANIC',
+  'University', 'UNIVERSITY',
+  'Polytechnic', 'POLYTECHNIC',
+  'College of Education', 'COLLEGE_OF_EDUCATION', 'COLLEGE_OF_ED',
+  'Monotechnic', 'MONOTECHNIC',
+  'College of Nursing / Health Sciences', 'COLLEGE_OF_NURSING',
+  'Professional / Postgraduate Institute', 'POSTGRADUATE', 'PROFESSIONAL',
   'PRIMARY_SECONDARY',
   'COMBINED_NURSERY_PRIMARY_SECONDARY'
 ];
+
+function normalizeTier(tier: string): string {
+  const upper = String(tier || "").trim().toUpperCase();
+  if (upper === "CRECHE") return "Creche";
+  if (upper === "NURSERY" || upper.includes("KINDERGARTEN")) return "Nursery / Kindergarten";
+  if (upper === "PRIMARY") return "Primary School";
+  if (upper === "SECONDARY" || upper === "JSS" || upper === "SSS") return "Senior Secondary School";
+  if (upper === "UNIVERSITY") return "University";
+  if (upper === "POLYTECHNIC") return "Polytechnic";
+  if (upper.includes("EDUCATION") || upper === "COLLEGE_OF_ED") return "College of Education";
+  if (upper === "MONOTECHNIC") return "Monotechnic";
+  if (upper.includes("NURSING")) return "College of Nursing / Health Sciences";
+  if (upper.includes("POSTGRADUATE") || upper.includes("PROFESSIONAL")) return "Professional / Postgraduate Institute";
+  return tier;
+}
 
 import { createTenantWithAdmin, hardDeleteTenant } from "@/lib/tenant-service";
 
@@ -45,9 +55,9 @@ export async function createSchool(formData: FormData) {
   const contactPhone = formData.get("contactPhone") as string;
   const password = formData.get("password") as string;
   const confirmPassword = formData.get("confirmPassword") as string;
-  const tiers = formData.getAll("tiers") as string[];
+  const rawTiers = formData.getAll("tiers") as string[];
 
-  if (!name || !subdomain || !adminEmail || tiers.length === 0) {
+  if (!name || !subdomain || !adminEmail || rawTiers.length === 0) {
     throw new Error("Missing required fields or academic tiers.");
   }
 
@@ -55,15 +65,23 @@ export async function createSchool(formData: FormData) {
     throw new Error("Passwords do not match.");
   }
 
+  const effectiveTiers = rawTiers.map(normalizeTier);
   const hasExplicitPassword = Boolean(password && password.trim().length > 0);
 
+  const cleanSubdomain = (subdomain || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, "")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+
   const result = await createTenantWithAdmin({
-    slug: subdomain,
+    slug: cleanSubdomain,
     name,
     adminEmail,
     adminPassword: password || "Password123",
     contactPhone,
-    tiers,
+    tiers: effectiveTiers,
     isSelfRegistration: hasExplicitPassword,
     mustChangePassword: !hasExplicitPassword,
     isTemporaryPassword: !hasExplicitPassword,

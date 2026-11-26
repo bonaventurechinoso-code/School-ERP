@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import Image from "next/image";
-import { CheckCircle2, ExternalLink, Copy, Check, Globe, ShieldCheck, ArrowRight, Sparkles, Loader2, Lock, Eye, EyeOff } from "lucide-react";
+import { CheckCircle2, ExternalLink, Copy, Check, Globe, ShieldCheck, ArrowRight, Sparkles, Loader2, Lock, Eye, EyeOff, Mail, Pause, Play } from "lucide-react";
 import { useNumericInput } from "@/hooks/useNumericInput";
 import { persistStoredSession, AUTH_UPDATE_EVENT } from "@/lib/session-context";
 import { setAuthToken } from "@/lib/api-client";
@@ -22,6 +22,16 @@ interface RegistrationResult {
   subdomain: string;
   schoolName: string;
   adminEmail: string;
+  emailSent?: boolean;
+  emailStatus?: string;
+  credentials?: {
+    schoolName: string;
+    subdomain: string;
+    adminEmail: string;
+    adminPassword?: string;
+    portalUrl: string;
+    loginUrl: string;
+  };
   sslReady?: boolean;
   targetFqdn?: string;
   portalUrl: string;
@@ -71,6 +81,11 @@ export default function RegisterTenantPage() {
 
   const [selectedTiers, setSelectedTiers] = useState<string[]>([]);
   const [registrationData, setRegistrationData] = useState<RegistrationResult | null>(null);
+
+  // Success screen countdown & interaction states
+  const [countdown, setCountdown] = useState(25);
+  const [isCountdownPaused, setIsCountdownPaused] = useState(false);
+  const [showSuccessPassword, setShowSuccessPassword] = useState(false);
 
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const elapsedTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -181,26 +196,20 @@ export default function RegisterTenantPage() {
     return `https://${effectiveSlug}.${rootDisplay}/`;
   }, [registrationData?.subdomain, formData.subdomain, rootDisplay]);
 
-  // 1. After all 3 checks = true, IMMEDIATELY redirect to subdomain root:
+  // Success screen automatic countdown (only active on Step 3)
   useEffect(() => {
-    if (sslVerified) {
+    if (step === 3 && !isCountdownPaused && countdown > 0) {
+      const timer = setTimeout(() => {
+        setCountdown(prev => prev - 1);
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+    if (step === 3 && !isCountdownPaused && countdown === 0 && registrationData) {
       const slug = registrationData?.subdomain || formData.subdomain;
-      const targetUrl = registrationData?.redirectUrl || registrationData?.portalUrl || registrationData?.subdomainUrl || getSubdomainUrl(slug);
+      const targetUrl = registrationData?.loginUrl || registrationData?.portalUrl || registrationData?.redirectUrl || getSubdomainUrl(slug);
       window.location.href = targetUrl;
     }
-  }, [sslVerified, registrationData, formData.subdomain, getSubdomainUrl]);
-
-  // 2. Add safety timeout so it NEVER spins more than 5 seconds:
-  useEffect(() => {
-    if (isConfiguring) {
-      const slug = registrationData?.subdomain || formData.subdomain;
-      const t = setTimeout(() => {
-        const targetUrl = registrationData?.redirectUrl || registrationData?.portalUrl || registrationData?.subdomainUrl || getSubdomainUrl(slug);
-        window.location.href = targetUrl;
-      }, 5000);
-      return () => clearTimeout(t);
-    }
-  }, [isConfiguring, registrationData, formData.subdomain, getSubdomainUrl]);
+  }, [step, isCountdownPaused, countdown, registrationData, formData.subdomain, getSubdomainUrl]);
 
   const availableTiers = [
     { id: "NURSERY", label: "Creche / Nursery", desc: "Ages 0-4" },
@@ -408,10 +417,6 @@ export default function RegisterTenantPage() {
     }
 
     setIsSubmitting(true);
-    setIsConfiguring(true);
-    setElapsedSeconds(0);
-    setSslVerified(false);
-    setConfiguringStatusText("Writing tenant database records and requesting SSL certificate...");
     setErrorMsg("");
 
     try {
@@ -434,7 +439,6 @@ export default function RegisterTenantPage() {
       if (!res.ok || !data.success) {
         setErrorMsg(data.message || (data as any).error || "Registration failed. Please try again.");
         setIsSubmitting(false);
-        setIsConfiguring(false);
         return;
       }
 
@@ -449,14 +453,16 @@ export default function RegisterTenantPage() {
         }
       }
 
-      // Block immediate redirect and synchronize with reverse proxy SSL handshake
-      executeFinalHealthCheckAndRedirect(data);
+      setRegistrationData(data);
+      setIsSubmitting(false);
+      setStep(3); // Transition directly to Step 3: SUCCESS CONFIRMATION VIEW
+      setCountdown(25);
+      setIsCountdownPaused(false);
 
     } catch (err: any) {
       console.error("[TENANT_REGISTRATION_EXCEPTION]:", err);
       setErrorMsg("An unexpected connection error occurred during registration. Please try again.");
       setIsSubmitting(false);
-      setIsConfiguring(false);
     }
   };
 
@@ -478,23 +484,35 @@ export default function RegisterTenantPage() {
               <span className="text-[10px] sm:text-xs uppercase tracking-wider text-blue-400 font-bold">School ERP</span>
             </div>
             {!isConfiguring && (
-              <div className="flex items-center gap-1 text-[10px] sm:text-xs font-semibold px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
-                <span>Step {step} of 2</span>
+              <div className="flex items-center gap-1 text-[10px] sm:text-xs font-semibold px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full border border-slate-700 bg-slate-800 text-slate-300">
+                {step === 3 ? (
+                  <span className="text-emerald-400 font-bold flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3" /> Step 3 of 3 • Active
+                  </span>
+                ) : (
+                  <span>Step {step} of 2</span>
+                )}
               </div>
             )}
           </div>
           <h1 className="text-base sm:text-2xl font-bold leading-tight">
             {isConfiguring
               ? "Configuring secure school portal..."
+              : step === 3
+              ? "🎉 Institutional Workspace Provisioned!"
               : "Register Your School"}
           </h1>
           <p className="text-slate-400 text-[11px] sm:text-sm mt-0.5">
             {isConfiguring ? (
               <span className="text-blue-400 font-medium flex items-center gap-1.5">
-                <Loader2 className="w-3.5 h-3.5 animate-spin" /> Synchronizing SSL handshake & reverse proxy
+                <Loader2 className="w-3.5 h-3.5 animate-spin" /> Synchronizing database and portal records
               </span>
+            ) : step === 3 ? (
+              "Your school is activated with master administrator credentials below."
+            ) : step === 1 ? (
+              "Institutional Identity & Administrator Setup"
             ) : (
-              step === 1 ? "Institutional Identity & Administrator Setup" : "Academic Tier Allocation"
+              "Academic Tier Allocation"
             )}
           </p>
         </div>
@@ -900,7 +918,7 @@ export default function RegisterTenantPage() {
                       {isSubmitting ? (
                         <>
                           <Loader2 className="w-4 h-4 animate-spin" />
-                          <span>Configuring Portal...</span>
+                          <span>Provisioning School Workspace...</span>
                         </>
                       ) : (
                         <>
@@ -909,6 +927,157 @@ export default function RegisterTenantPage() {
                         </>
                       )}
                     </button>
+                  </div>
+                </div>
+              )}
+
+              {/* STEP 3: PROVISIONING CONFIRMATION & CREDENTIALS DISPLAY */}
+              {step === 3 && registrationData && (
+                <div className="space-y-4 sm:space-y-5 animate-in zoom-in-95 duration-300 flex-1 flex flex-col text-left">
+                  {/* Success Alert Banner */}
+                  <div className="p-4 sm:p-5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 flex items-start sm:items-center gap-3.5">
+                    <div className="w-11 h-11 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-emerald-600/30">
+                      <CheckCircle2 className="w-6 h-6" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h2 className="text-base sm:text-lg font-extrabold text-emerald-900 dark:text-emerald-100">
+                          {registrationData.schoolName || formData.schoolName} Provisioned!
+                        </h2>
+                        <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200 border border-emerald-300 dark:border-emerald-700">
+                          14-Day Free Trial Active
+                        </span>
+                      </div>
+                      <p className="text-xs sm:text-sm text-emerald-700 dark:text-emerald-300 mt-0.5 leading-relaxed">
+                        Your multi-tenant workspace is live with isolated schema and master administrator credentials.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Master Credentials Box */}
+                  <div className="bg-slate-50 dark:bg-zinc-800/60 rounded-2xl p-4 sm:p-5 border border-slate-200 dark:border-zinc-700 space-y-3.5">
+                    <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-zinc-700">
+                      <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-zinc-400">
+                        Platform Access Credentials
+                      </span>
+                      <span className="text-[11px] font-semibold text-slate-500 dark:text-zinc-400">
+                        Please copy or save these credentials
+                      </span>
+                    </div>
+
+                    {/* Row 1: Dedicated Portal URL */}
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-500 dark:text-zinc-400 uppercase tracking-wider mb-1">
+                        Dedicated Institutional URL
+                      </label>
+                      <div className="flex items-center gap-2 bg-white dark:bg-zinc-900 p-2 sm:p-2.5 rounded-xl border border-slate-200 dark:border-zinc-700">
+                        <Globe className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                        <span className="font-mono text-xs sm:text-sm font-bold text-slate-900 dark:text-white truncate flex-1 select-all">
+                          {registrationData.portalUrl || registrationData.subdomainUrl || getSubdomainUrl()}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => copyToClipboard(registrationData.portalUrl || registrationData.subdomainUrl || getSubdomainUrl(), "portalUrl")}
+                          className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-zinc-800 hover:bg-slate-200 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-300 transition flex items-center gap-1 cursor-pointer shrink-0"
+                        >
+                          {copiedField === "portalUrl" ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                          <span>{copiedField === "portalUrl" ? "Copied" : "Copy"}</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Row 2: Administrator Login Email */}
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-500 dark:text-zinc-400 uppercase tracking-wider mb-1">
+                        Admin Login Email
+                      </label>
+                      <div className="flex items-center gap-2 bg-white dark:bg-zinc-900 p-2 sm:p-2.5 rounded-xl border border-slate-200 dark:border-zinc-700">
+                        <span className="font-mono text-xs sm:text-sm font-bold text-slate-900 dark:text-white truncate flex-1 select-all">
+                          {registrationData.adminEmail || formData.adminEmail}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => copyToClipboard(registrationData.adminEmail || formData.adminEmail, "adminEmail")}
+                          className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-zinc-800 hover:bg-slate-200 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-300 transition flex items-center gap-1 cursor-pointer shrink-0"
+                        >
+                          {copiedField === "adminEmail" ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                          <span>{copiedField === "adminEmail" ? "Copied" : "Copy"}</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Row 3: Master Password */}
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-500 dark:text-zinc-400 uppercase tracking-wider mb-1">
+                        Master Administrator Password
+                      </label>
+                      <div className="flex items-center gap-2 bg-white dark:bg-zinc-900 p-2 sm:p-2.5 rounded-xl border border-slate-200 dark:border-zinc-700">
+                        <Lock className="w-4 h-4 text-amber-500 shrink-0" />
+                        <span className="font-mono text-xs sm:text-sm font-bold text-slate-900 dark:text-white truncate flex-1">
+                          {showSuccessPassword ? formData.adminPassword : "••••••••••••"}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setShowSuccessPassword(!showSuccessPassword)}
+                          className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 transition cursor-pointer"
+                          aria-label="Toggle password visibility"
+                        >
+                          {showSuccessPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => copyToClipboard(formData.adminPassword, "password")}
+                          className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-zinc-800 hover:bg-slate-200 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-300 transition flex items-center gap-1 cursor-pointer shrink-0"
+                        >
+                          {copiedField === "password" ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                          <span>{copiedField === "password" ? "Copied" : "Copy"}</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Email Dispatch Status Callout */}
+                  <div className={`p-3.5 rounded-xl text-xs flex items-start gap-2.5 border ${
+                    registrationData.emailSent
+                      ? "bg-blue-50 dark:bg-blue-950/40 border-blue-200 dark:border-blue-900/60 text-blue-800 dark:text-blue-200"
+                      : "bg-slate-100 dark:bg-zinc-800/80 border-slate-200 dark:border-zinc-700 text-slate-700 dark:text-zinc-300"
+                  }`}>
+                    <Mail className="w-4 h-4 shrink-0 mt-0.5 text-blue-600 dark:text-blue-400" />
+                    <div className="leading-relaxed">
+                      {registrationData.emailSent ? (
+                        <>
+                          <strong>Credentials Email Dispatched:</strong> A welcome confirmation email with complete workspace access instructions has been delivered to <strong>{registrationData.adminEmail}</strong>.
+                        </>
+                      ) : (
+                        <>
+                          <strong>Access Notification:</strong> Please save your administrator credentials above. You can log into your administrative workspace directly anytime.
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Sticky Action Footer */}
+                  <div className="sticky bottom-0 -mx-3 sm:-mx-6 md:-mx-8 -mb-3 sm:-mb-6 md:-mb-8 mt-auto p-3 sm:p-5 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border-t border-slate-200 dark:border-zinc-800 flex flex-col sm:flex-row items-center justify-between gap-3 rounded-b-2xl sm:rounded-b-3xl z-30">
+                    <div className="text-xs text-slate-500 dark:text-zinc-400 flex items-center gap-2">
+                      <span>
+                        {isCountdownPaused ? "Auto-redirect paused" : `Auto-redirecting in ${countdown}s`}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setIsCountdownPaused(!isCountdownPaused)}
+                        className="text-blue-600 dark:text-blue-400 font-semibold hover:underline cursor-pointer"
+                      >
+                        {isCountdownPaused ? "Resume Countdown" : "Stay on Page"}
+                      </button>
+                    </div>
+
+                    <a
+                      href={registrationData.loginUrl || registrationData.portalUrl || registrationData.redirectUrl || getSubdomainUrl()}
+                      className="w-full sm:w-auto px-6 py-2.5 sm:py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition shadow-md hover:shadow-lg flex items-center justify-center gap-2 text-sm sm:text-base cursor-pointer"
+                    >
+                      <span>Access School Admin Portal</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </a>
                   </div>
                 </div>
               )}
